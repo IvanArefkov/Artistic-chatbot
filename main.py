@@ -1,7 +1,7 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
 from typing import Annotated
-from pydantic import AfterValidator
+
+from fastapi import FastAPI
+from pydantic import AfterValidator, BaseModel
 
 app = FastAPI()
 
