@@ -23,7 +23,7 @@ class Customer(Base):
 
     # Better name for WhatsApp context, with index for fast lookups
     whatsapp_number: Mapped[str] = mapped_column(
-        String(20), nullable=False, unique=True, index=True
+        String(25), nullable=False, unique=True, index=True
     )
 
     email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

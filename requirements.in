@@ -11,3 +11,7 @@ pytest
 httpx
 ruff
 mypy
+langchain
+chromadb
+langchain_openai
+langchain_community
