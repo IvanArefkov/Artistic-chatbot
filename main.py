@@ -15,10 +15,15 @@ from langchain_community.document_loaders import WebBaseLoader
 from fastapi.middleware.cors import CORSMiddleware
 
 dotenv.load_dotenv()
+
+variable_origin = os.getenv("ORIGIN")
 app = FastAPI()
 origins = [
     "http://localhost:3000",
 ]
+if variable_origin:
+    origins.append(str(variable_origin))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
