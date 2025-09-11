@@ -1,0 +1,17 @@
+fastapi[standard]
+uvicorn[standard]
+twilio
+openai
+sqlalchemy
+alembic
+psycopg2-binary
+python-dotenv
+pydantic
+pytest
+httpx
+ruff
+mypy
+langchain
+chromadb
+langchain_openai
+langchain_community

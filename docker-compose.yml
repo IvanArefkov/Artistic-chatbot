@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: chatbot_postgres
+    environment:
+      POSTGRES_DB: chatbot_db
+      POSTGRES_USER: chatbot_user
+      POSTGRES_PASSWORD: chatbot_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Optional: Database admin interface
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: chatbot_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@chatbot.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8080:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8001:8000"
+    volumes:
+      - chromadb_data:/chroma/chroma
+    environment:
+      - CHROMA_SERVER_AUTHN_CREDENTIALS_FILE=/chroma/server.htpasswd
+      - CHROMA_SERVER_AUTHN_PROVIDER=chromadb.auth.basic.BasicAuthenticationServerProvider
+      - ANONYMIZED_TELEMETRY=True
+      - IS_PERSISTENT=True
+      - PERSIST_DIRECTORY=/chroma/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+
+
+volumes:
+  postgres_data:
+  chromadb_data:
+    driver: local
