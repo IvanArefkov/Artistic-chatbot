@@ -1,4 +1,6 @@
-from fastapi import FastAPI, UploadFile
+from typing import Annotated
+
+from fastapi import FastAPI, UploadFile, Depends
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -13,14 +15,19 @@ from langchain_chroma import Chroma
 import chromadb
 from langchain_community.document_loaders import WebBaseLoader
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 
 dotenv.load_dotenv()
 
-variable_origin = os.getenv("ORIGIN")
+
 app = FastAPI()
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
 origins = [
     "http://localhost:3000",
 ]
+variable_origin = os.getenv("ORIGIN")
 if variable_origin:
     origins.append(str(variable_origin))
 
@@ -67,7 +74,7 @@ async def root():
 
 
 @app.get("/db_init")
-async def db_init():
+async def db_init(token: Annotated[str,Depends(oauth2_scheme)]):
     Base.metadata.create_all(engine)
     return {"status":"success init db"}
 
@@ -83,7 +90,7 @@ async def rag_search(query: UserQuery):
     return response.text()
 
 @app.post("/upload-file")
-async def upload_file(file: UploadFile):
+async def upload_file(file: Annotated[UploadFile,Depends(oauth2_scheme)]):
     file_read = await file.read()
     text_file = file_read.decode("utf-8")
     vector_store = connect_chromadb()
@@ -97,7 +104,7 @@ async def upload_file(file: UploadFile):
     }
 
 @app.get("/scrape")
-async def test_model():
+async def test_model(token: Annotated[str,Depends(oauth2_scheme)]):
     # model = init_chat_model("gpt-5-mini", model_provider='openai')
     loader = WebBaseLoader('https://artistic-co.ru/product/dr-arrivo-ghost-euro/')
     docs = loader.load()
