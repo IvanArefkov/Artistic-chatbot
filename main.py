@@ -32,7 +32,11 @@ app.add_middleware(
 )
 engine = create_engine("postgresql://chatbot_user:chatbot_pass@localhost:5432/chatbot_db", echo=True)
 def connect_chromadb():
-    chroma_client = chromadb.HttpClient(host=os.getenv("CHROMADB_HOST"),port=8001)
+    chroma_client = chromadb.CloudClient(
+        api_key=f'{os.environ["CHROMA_CLOUD_API"]}',
+        tenant=f'{os.environ["CHROMA_TENANT"]}',
+        database='Artistic-vector-db'
+    )
     embeddings = OpenAIEmbeddings()
     vector_store = Chroma(
         client=chroma_client,
