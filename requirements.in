@@ -12,6 +12,7 @@ httpx
 ruff
 mypy
 langchain
+langchain-chroma
 chromadb
 langchain_openai
 langchain_community

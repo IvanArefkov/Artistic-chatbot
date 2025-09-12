@@ -48,7 +48,9 @@ certifi==2025.8.3
 charset-normalizer==3.4.3
     # via requests
 chromadb==1.0.20
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   langchain-chroma
 click==8.2.1
     # via
     #   rich-toolkit
@@ -149,11 +151,14 @@ langchain==0.3.27
     # via
     #   -r requirements.in
     #   langchain-community
+langchain-chroma==0.2.6
+    # via -r requirements.in
 langchain-community==0.3.29
     # via -r requirements.in
 langchain-core==0.3.76
     # via
     #   langchain
+    #   langchain-chroma
     #   langchain-community
     #   langchain-openai
     #   langchain-text-splitters
@@ -195,6 +200,7 @@ mypy-extensions==1.1.0
 numpy==2.3.3
     # via
     #   chromadb
+    #   langchain-chroma
     #   langchain-community
     #   onnxruntime
 oauthlib==3.3.1
