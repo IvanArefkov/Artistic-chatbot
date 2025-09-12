@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import FastAPI, UploadFile, Depends
+from fastapi import FastAPI, UploadFile, Depends, HTTPException
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -15,7 +15,7 @@ from langchain_chroma import Chroma
 import chromadb
 from langchain_community.document_loaders import WebBaseLoader
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 dotenv.load_dotenv()
 
@@ -111,3 +111,11 @@ async def test_model(token: Annotated[str,Depends(oauth2_scheme)]):
     print(docs)
     # response = model.invoke([HumanMessage(content='Hi, my name is Ivan')])
     return
+
+@app.post("/token")
+async def authorise(form_data: Annotated[OAuth2PasswordRequestForm,Depends()]):
+    user = form_data.username
+    password = form_data.password
+    if user != os.getenv("ADMIN") or password != os.getenv("ADMIN_PASSWORD"):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    return {"access_token": user, 'token_type': 'bearer'}
