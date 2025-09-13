@@ -16,3 +16,4 @@ langchain-chroma
 chromadb
 langchain_openai
 langchain_community
+bs4

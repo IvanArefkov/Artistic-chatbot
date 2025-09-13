@@ -70,14 +70,14 @@ async def upload_file(file: UploadFile, token: Annotated[str,Depends(oauth2_sche
     }
 
 
-@app.post("/scrape")
-async def test_model(link: str, token: Annotated[str, Depends(oauth2_scheme)]):
-    product_name = scape_format_embed(link)
+@app.get("/check-for-new-product")
+async def test_model(token: Annotated[str, Depends(oauth2_scheme)]):
+    product_name = scrape_links()
     return {'message': product_name}
 
 @app.post('/find-links')
 def find_links(link: str, token: Annotated[str, Depends(oauth2_scheme)]):
-    scrape_links(link)
+    scrape_links()
     return {'message': 'link found'}
 
 @app.post("/token")
