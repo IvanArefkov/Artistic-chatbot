@@ -10,16 +10,18 @@ import requests
 import chromadb
 import os
 
-def scrape_links(link:str):
-    response = requests.get(link)
+def scrape_links():
+    response = requests.get(os.environ.get('CATALOG_PAGE_URL'))
     html_content = response.content
     soup = bs(html_content, 'html.parser')
     all_links = soup.find_all('a', class_='p-card__img')
-    with open('site-map.txt', 'a') as f:
-        for a_tag in all_links:
-            href_value = a_tag.get('href')
-            f.write(href_value + '\n')
-
+    links_list = [link.get('href') for link in all_links if link.has_attr('href')]
+    with open('site-map.txt','r') as f:
+        file_text = f.read()
+        for link in links_list:
+            if link not in file_text.splitlines():
+                print(link, 'not found')
+                scape_format_embed(link)
 
 
 def scape_format_embed(link: str):
