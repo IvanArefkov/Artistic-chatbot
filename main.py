@@ -1,9 +1,5 @@
 from typing import Annotated
-
 from fastapi import FastAPI, UploadFile, Depends, HTTPException
-from langchain_openai import OpenAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
 from pydantic import BaseModel
 from sqlalchemy import create_engine
 from db.models.base import Base
@@ -11,12 +7,9 @@ import os
 import dotenv
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_chroma import Chroma
-import chromadb
-from langchain_community.document_loaders import WebBaseLoader
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-
+from utils.util import scape_format_embed, retrieve, scrape_links
 dotenv.load_dotenv()
 
 
@@ -38,35 +31,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 engine = create_engine("postgresql://chatbot_user:chatbot_pass@localhost:5432/chatbot_db", echo=True)
-def connect_chromadb():
-    chroma_client = chromadb.CloudClient(
-        api_key=f'{os.environ["CHROMA_CLOUD_API"]}',
-        tenant=f'{os.environ["CHROMA_TENANT"]}',
-        database='Artistic-vector-db'
-    )
-    embeddings = OpenAIEmbeddings()
-    vector_store = Chroma(
-        client=chroma_client,
-        collection_name='my_collection',
-        embedding_function=embeddings
-    )
-    return vector_store
-
-class User(BaseModel):
-    username: str
-    email: str
-    disabled: bool
 
 class UserQuery(BaseModel):
     message: str
 
 
-# Define application steps
-def retrieve(query: str):
-    vector_store = connect_chromadb()
-    retrieved_docs = vector_store.similarity_search(query)
-    docs_content = "\n\n".join(doc.page_content for doc in retrieved_docs)
-    return docs_content
 
 @app.get("/")
 async def root():
@@ -89,28 +58,27 @@ async def rag_search(query: UserQuery):
     response = model.invoke(message)
     return response.text()
 
-@app.post("/upload-file")
-async def upload_file(file: Annotated[UploadFile,Depends(oauth2_scheme)]):
+@app.post("/upload-site-map")
+async def upload_file(file: UploadFile, token: Annotated[str,Depends(oauth2_scheme)]):
     file_read = await file.read()
     text_file = file_read.decode("utf-8")
-    vector_store = connect_chromadb()
-
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000,chunk_overlap=200)
-    all_splits = text_splitter.split_text(text=text_file)
-    vector_store.add_texts(all_splits)
-
+    site_map = text_file.split("\n")
+    for site in site_map:
+        scape_format_embed(site)
     return {
         'response':'upload success',
     }
 
-@app.get("/scrape")
-async def test_model(token: Annotated[str,Depends(oauth2_scheme)]):
-    # model = init_chat_model("gpt-5-mini", model_provider='openai')
-    loader = WebBaseLoader('https://artistic-co.ru/product/dr-arrivo-ghost-euro/')
-    docs = loader.load()
-    print(docs)
-    # response = model.invoke([HumanMessage(content='Hi, my name is Ivan')])
-    return
+
+@app.post("/scrape")
+async def test_model(link: str, token: Annotated[str, Depends(oauth2_scheme)]):
+    product_name = scape_format_embed(link)
+    return {'message': product_name}
+
+@app.post('/find-links')
+def find_links(link: str, token: Annotated[str, Depends(oauth2_scheme)]):
+    scrape_links(link)
+    return {'message': 'link found'}
 
 @app.post("/token")
 async def authorise(form_data: Annotated[OAuth2PasswordRequestForm,Depends()]):
