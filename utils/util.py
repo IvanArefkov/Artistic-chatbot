@@ -81,4 +81,5 @@ def process_text_to_chrome(text: str, metadata: dict):
     vector_store = connect_chromadb()
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     all_splits = text_splitter.split_text(text=text)
-    vector_store.add_texts(texts=all_splits, metadatas=[metadata])
+    metadata_list = [metadata for _ in all_splits]
+    vector_store.add_texts(texts=all_splits, metadatas=metadata_list)
