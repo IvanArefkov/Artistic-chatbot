@@ -83,3 +83,15 @@ def process_text_to_chrome(text: str, metadata: dict):
     all_splits = text_splitter.split_text(text=text)
     metadata_list = [metadata for _ in all_splits]
     vector_store.add_texts(texts=all_splits, metadatas=metadata_list)
+
+def define_message_intent(message: str):
+    model = init_chat_model("gpt-5-nano", model_provider='openai')
+    file = open('use-rag-prompt.txt','r')
+    prompt = file.read()
+    file.close()
+    model_message = [
+        SystemMessage(content=prompt),
+        HumanMessage(content=message),
+    ]
+    response = model.invoke(model_message)
+    return response.text()

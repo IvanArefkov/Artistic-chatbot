@@ -9,7 +9,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from utils.util import scape_format_embed, retrieve, scrape_links
+from utils.util import scape_format_embed, retrieve, scrape_links, define_message_intent
 dotenv.load_dotenv()
 
 
@@ -33,7 +33,9 @@ app.add_middleware(
 engine = create_engine("postgresql://chatbot_user:chatbot_pass@localhost:5432/chatbot_db", echo=True)
 
 class UserQuery(BaseModel):
+    history: str
     message: str
+
 
 
 
@@ -48,15 +50,26 @@ async def db_init(token: Annotated[str,Depends(oauth2_scheme)]):
     return {"status":"success init db"}
 
 @app.post("/chat")
-async def rag_search(query: UserQuery):
-    docs_content = retrieve(query.message)
-    file = open('system_message.txt','r')
+async def chat(query: UserQuery):
+    intent = define_message_intent(message=query.message)
+    file = open('system_message.txt', 'r')
     system_prompt = file.read()
     file.close()
-    message = [
-        SystemMessage(content=f'{system_prompt}, Контекст: {docs_content}'),
-        HumanMessage(content=query.message)
-    ]
+
+    if "НЕ_ИСПОЛЬЗОВАТЬ_RAG" in intent:
+        print('НЕ_ИСПОЛЬЗОВАТЬ_RAG')
+        message = [
+            SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
+            HumanMessage(content=query.message)
+        ]
+    else :
+        print('ИСПОЛЬЗОВАТЬ_RAG')
+        docs_content = retrieve(query.message)
+        message = [
+            SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {query.history}'),
+            HumanMessage(content=query.message)
+        ]
+
     model = init_chat_model("gpt-5", model_provider="openai")
     response = model.invoke(message)
     return response.text()
