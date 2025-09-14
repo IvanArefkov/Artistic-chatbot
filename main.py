@@ -50,11 +50,14 @@ async def db_init(token: Annotated[str,Depends(oauth2_scheme)]):
 @app.post("/chat")
 async def rag_search(query: UserQuery):
     docs_content = retrieve(query.message)
+    file = open('system_message.txt','r')
+    system_prompt = file.read()
+    file.close()
     message = [
-        SystemMessage(content=f'You are a helpful assistant. Provide a maximum 1 paragraph answer, no more then 300 characters. At the end of the response always ask the user a followup question. Respond only in Russian language.  Answer the users message based on this context: {docs_content}'),
+        SystemMessage(content=f'{system_prompt}, Контекст: {docs_content}'),
         HumanMessage(content=query.message)
     ]
-    model = init_chat_model("gpt-5-mini", model_provider="openai")
+    model = init_chat_model("gpt-5", model_provider="openai")
     response = model.invoke(message)
     return response.text()
 
