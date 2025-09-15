@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Annotated
-from fastapi import FastAPI, UploadFile, Depends, HTTPException,status
+from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form
 from pydantic import BaseModel
 from sqlalchemy import create_engine
 from db.models.base import Base
@@ -160,15 +160,46 @@ async def authorise(form_data: Annotated[OAuth2PasswordRequestForm,Depends()]):
     token = jwt.encode({'username': user, 'password': password}, SECRET_KEY, algorithm='HS256')
     return {"access_token": token, 'token_type': 'bearer'}
 
+
 @app.post("/edit-system-message")
-async def edit_system_message(new_message: SystemMessageModel, token: Annotated[str, Depends(get_admin_user)]):
-    with open('system_message.txt', 'w') as file:
-        file.write(new_message.message)
-    return {'message': 'system message updated'}
+async def edit_system_message(
+        token: Annotated[str, Depends(get_admin_user)],
+        message: str = Form(...),
+        prompt: str = Form(...),
+):
+    # Define mapping of prompt labels to file names
+    file_mapping = {
+        'System Message': 'system_message.txt',
+        'Lead Discovery': 'lead_discovery_prompt.txt',
+        'Knowledge Base': 'use_rag_prompt.txt'
+    }
+
+    # Get the appropriate filename
+    filename = file_mapping.get(prompt)
+
+    if not filename:
+        raise HTTPException(status_code=400, detail=f"Invalid prompt type: {prompt}")
+
+    try:
+        with open(filename, 'w', encoding='utf-8') as file:
+            file.write(message)
+
+        return {'message': f'{prompt} updated successfully', 'file': filename}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error writing to file: {str(e)}")
 
 
 @app.get('/get-system-message')
 async def get_system_message(token: Annotated[str, Depends(get_admin_user)]):
     with open('system_message.txt', 'r', encoding='utf-8') as file:
         system_message = file.read()
-    return {'message': system_message}
+    with open('lead_discovery_prompt.txt', 'r', encoding='utf-8') as file:
+        lead_discovery_prompt = file.read()
+    with open('use-rag-prompt.txt', 'r', encoding='utf-8') as file:
+        use_rag_prompt = file.read()
+
+    return {'system_message': system_message,
+            'lead_discovery_prompt': lead_discovery_prompt,
+            'use_rag_prompt': use_rag_prompt
+            }
