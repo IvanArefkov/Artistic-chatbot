@@ -110,11 +110,19 @@ async def chat(query: UserQuery):
             SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
             HumanMessage(content=query.message)
         ]
-    else :
+    elif 'ИСПОЛЬЗОВАТЬ_RAG' in intent:
         print('ИСПОЛЬЗОВАТЬ_RAG')
         docs_content = retrieve(query.message)
         message = [
             SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {query.history}'),
+            HumanMessage(content=query.message)
+        ]
+    else:
+        print('ОЦЕНИТЬ_ЛИДА')
+        with open('lead_discovery_prompt.txt', 'r') as f:
+            system_prompt = f.read()
+        message = [
+            SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
             HumanMessage(content=query.message)
         ]
 
@@ -132,7 +140,6 @@ async def upload_file(file: UploadFile, token: Annotated[str, Depends(get_admin_
     return {
         'response':'upload success',
     }
-
 
 @app.get("/check-for-new-product")
 async def test_model(token: Annotated[str, Depends(get_admin_user)]):
