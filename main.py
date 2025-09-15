@@ -128,6 +128,7 @@ async def chat(query: UserQuery):
 
     model = init_chat_model("gpt-5", model_provider="openai")
     response = model.invoke(message)
+    print(response.usage_metadata)
     return response.text()
 
 @app.post("/upload-site-map")
@@ -164,8 +165,8 @@ async def authorise(form_data: Annotated[OAuth2PasswordRequestForm,Depends()]):
 @app.post("/edit-system-message")
 async def edit_system_message(
         token: Annotated[str, Depends(get_admin_user)],
-        message: str = Form(...),
-        prompt: str = Form(...),
+        message: Annotated[str,Form()],
+        label: Annotated[str,Form()],
 ):
     # Define mapping of prompt labels to file names
     file_mapping = {
@@ -175,16 +176,16 @@ async def edit_system_message(
     }
 
     # Get the appropriate filename
-    filename = file_mapping.get(prompt)
+    filename = file_mapping.get(label)
 
     if not filename:
-        raise HTTPException(status_code=400, detail=f"Invalid prompt type: {prompt}")
+        raise HTTPException(status_code=400, detail=f"Invalid prompt type: {label}")
 
     try:
         with open(filename, 'w', encoding='utf-8') as file:
             file.write(message)
 
-        return {'message': f'{prompt} updated successfully', 'file': filename}
+        return {'message': f'{label} updated successfully', 'file': filename}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing to file: {str(e)}")
