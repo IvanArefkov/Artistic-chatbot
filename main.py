@@ -24,19 +24,21 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 origins = [
-    "http://localhost:3000",
-    "https://artistic-chatbot-frontend.vercel.app"
+    # "http://localhost:3000",
+    # "https://artistic-chatbot-frontend.vercel.app",
+    "*"
 ]
 variable_origin = os.getenv("ORIGIN")
-if variable_origin:
-    origins.append(str(variable_origin))
-
+# if variable_origin:
+#     origins.append(str(variable_origin))
+print(f"CORS origins: {origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 engine = create_engine("postgresql://chatbot_user:chatbot_pass@localhost:5432/chatbot_db", echo=True)
 
 class UserQuery(BaseModel):
