@@ -24,7 +24,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 origins = [
-    "http://localhost:3000",
+    # "http://localhost:3000",
+    # "https://artistic-chatbot-frontend.vercel.app",
+    "*"
 ]
 variable_origin = os.getenv("ORIGIN")
 # if variable_origin:
