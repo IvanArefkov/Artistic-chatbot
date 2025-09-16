@@ -29,7 +29,6 @@ origins = [
 variable_origin = os.getenv("ORIGIN")
 if variable_origin:
     origins.append(str(variable_origin))
-print(f"CORS origins: {origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -99,8 +98,10 @@ async def db_init(token: Annotated[str, Depends(get_admin_user)]):
 
 @app.post("/chat")
 async def chat(query: UserQuery):
-    intent = define_message_intent(message=query.message)
-    file = open('system_message.txt', 'r')
+    with open('prompts/use_rag_prompt.txt') as f:
+        intent_prompt = f.read()
+    intent = define_message_intent(message=query.message,prompt=intent_prompt)
+    file = open('prompts/system_message.txt', 'r')
     system_prompt = file.read()
     file.close()
 
@@ -110,25 +111,17 @@ async def chat(query: UserQuery):
             SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
             HumanMessage(content=query.message)
         ]
-    elif 'ИСПОЛЬЗОВАТЬ_RAG' in intent:
+    else:
         print('ИСПОЛЬЗОВАТЬ_RAG')
         docs_content = retrieve(query.message)
+        print('контекст', docs_content)
         message = [
             SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {query.history}'),
-            HumanMessage(content=query.message)
-        ]
-    else:
-        print('ОЦЕНИТЬ_ЛИДА')
-        with open('lead_discovery_prompt.txt', 'r') as f:
-            system_prompt = f.read()
-        message = [
-            SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
             HumanMessage(content=query.message)
         ]
 
     model = init_chat_model("gpt-5", model_provider="openai")
     response = model.invoke(message)
-    print(response.usage_metadata)
     return response.text()
 
 @app.post("/upload-site-map")
@@ -170,9 +163,8 @@ async def edit_system_message(
 ):
     # Define mapping of prompt labels to file names
     file_mapping = {
-        'System Message': 'system_message.txt',
-        'Lead Discovery': 'lead_discovery_prompt.txt',
-        'Knowledge Base': 'use_rag_prompt.txt'
+        'System Message': 'prompt/system_message.txt',
+        'Knowledge Base': 'prompt/use_rag_prompt.txt'
     }
 
     # Get the appropriate filename
@@ -193,14 +185,11 @@ async def edit_system_message(
 
 @app.get('/get-system-message')
 async def get_system_message(token: Annotated[str, Depends(get_admin_user)]):
-    with open('system_message.txt', 'r', encoding='utf-8') as file:
+    with open('prompts/system_message.txt', 'r', encoding='utf-8') as file:
         system_message = file.read()
-    with open('lead_discovery_prompt.txt', 'r', encoding='utf-8') as file:
-        lead_discovery_prompt = file.read()
-    with open('use-rag-prompt.txt', 'r', encoding='utf-8') as file:
+    with open('prompts/use_rag_prompt.txt', 'r', encoding='utf-8') as file:
         use_rag_prompt = file.read()
 
     return {'system_message': system_message,
-            'lead_discovery_prompt': lead_discovery_prompt,
             'use_rag_prompt': use_rag_prompt
             }

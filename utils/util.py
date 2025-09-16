@@ -84,11 +84,8 @@ def process_text_to_chrome(text: str, metadata: dict):
     metadata_list = [metadata for _ in all_splits]
     vector_store.add_texts(texts=all_splits, metadatas=metadata_list)
 
-def define_message_intent(message: str):
+def define_message_intent(message: str, prompt: str):
     model = init_chat_model("gpt-5-nano", model_provider='openai')
-    file = open('use-rag-prompt.txt','r')
-    prompt = file.read()
-    file.close()
     model_message = [
         SystemMessage(content=prompt),
         HumanMessage(content=message),
