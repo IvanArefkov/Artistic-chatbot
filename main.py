@@ -27,8 +27,8 @@ origins = [
     "http://localhost:3000",
 ]
 variable_origin = os.getenv("ORIGIN")
-# if variable_origin:
-#     origins.append(str(variable_origin))
+if variable_origin:
+    origins.append(str(variable_origin))
 print(f"CORS origins: {origins}")
 app.add_middleware(
     CORSMiddleware,
