@@ -1,98 +1,82 @@
-from datetime import datetime
-from typing import Optional
-from uuid import UUID, uuid4
-
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
+from sqlalchemy import String, Text, DateTime, Index, ForeignKey, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
+from datetime import datetime
+from typing import List
+import uuid
 
 class Base(DeclarativeBase):
     pass
 
 
-class Customer(Base):
-    __tablename__ = "customers"  # Should be plural
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
 
-    id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True), primary_key=True, default=uuid4
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True,
     )
-
-    # For MVP, maybe make name optional? They might not tell us initially
-    name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-
-    # Better name for WhatsApp context, with index for fast lookups
-    whatsapp_number: Mapped[str] = mapped_column(
-        String(25), nullable=False, unique=True, index=True
-    )
-
-    email: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),  # Auto-update when record changes
+        nullable=False,
+        default=func.now()
     )
 
-    total_interactions: Mapped[int] = mapped_column(Integer, default=0)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    # Lead qualification fields
-    lead_status: Mapped[Optional[str]] = mapped_column(
-        String(20), nullable=True, default="new"
-    )  # Options: new, warm, hot, qualified, customer, lost
-
-    ready_to_purchase: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    # Relationship to conversations (one customer has many conversations)
-    conversations: Mapped[list["Conversation"]] = relationship(
-        "Conversation", back_populates="customer"
+    # One-to-many relationship with ChatMessage
+    messages: Mapped[List["ChatMessage"]] = relationship(
+        "ChatMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
     )
 
-    def __repr__(self) -> str:
-        return (
-            f"<Customer(whatsapp_number='{self.whatsapp_number}', name='{self.name}')>"
-        )
+    def __repr__(self):
+        return f"<ChatSession(id='{self.id}', title='{self.title}')>"
 
 
-class Conversation(Base):
-    __tablename__ = "conversations"  # Should be plural
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
 
-    id: Mapped[UUID] = mapped_column(
-        PostgresUUID(as_uuid=True), primary_key=True, default=uuid4
+    # Primary key - UUID for distributed systems
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
     )
 
-    # Use Text for longer messages (WhatsApp can be up to 4096 chars)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-
-    created_at: Mapped[datetime] = mapped_column(  # Fixed typo: create_at -> created_at
-        DateTime(timezone=True), server_default=func.now()
+    # Foreign key to ChatSession
+    session_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("chat_sessions.id"), nullable=False, index=True
     )
 
-    # Foreign key should reference UUID type, not string
-    customer_id: Mapped[UUID] = mapped_column(
-        ForeignKey("customers.id"), nullable=False, index=True
+    # Who sent the message (user, assistant, system, etc.)
+    sender: Mapped[str] = mapped_column(
+        String(50), nullable=False, index=True
     )
 
-    # Who sent this message: "customer" or "assistant"
-    sender_type: Mapped[str] = mapped_column(
-        String(20), nullable=False
-    )  # Values: "customer" or "assistant"
-
-    # Optional: Store Twilio message ID for tracking
-    twilio_message_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-
-    # Relationship back to customer (many conversations belong to one customer)
-    customer: Mapped["Customer"] = relationship(
-        "Customer", back_populates="conversations"
+    # Message content - using Text for potentially long messages
+    content: Mapped[str] = mapped_column(
+        Text, nullable=False
     )
 
-    def __repr__(self) -> str:
-        return (
-            f"<Conversation(sender='{self.sender_type}', "
-            f"message='{self.message[:30]}...', date='{self.created_at}')>"
-        )
+    # When the message was created
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+        index=True
+    )
+
+    # Many-to-one relationship with ChatSession
+    session: Mapped["ChatSession"] = relationship(
+        "ChatSession",
+        back_populates="messages"
+    )
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        # For getting messages in a session ordered by time
+        Index('ix_session_created', 'session_id', 'created_at'),
+        # For getting messages by sender in a session
+        Index('ix_session_sender', 'session_id', 'sender'),
+    )
+
+    def __repr__(self):
+        return f"<ChatMessage(id='{self.id}', session='{self.session_id}', sender='{self.sender}')>"
