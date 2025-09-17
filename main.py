@@ -144,7 +144,7 @@ async def chat(query: UserQuery):
             HumanMessage(content=query.message)
         ]
 
-    model = init_chat_model("gpt-5", model_provider="openai")
+    model = init_chat_model("claude-sonnet-4-20250514", model_provider="anthropic")
     response = model.invoke(message)
     ai_chat_message = ChatMessage(
         session_id=session_id,
