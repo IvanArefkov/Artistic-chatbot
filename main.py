@@ -195,8 +195,8 @@ async def edit_system_message(
 ):
     # Define mapping of prompt labels to file names
     file_mapping = {
-        'System Message': 'prompt/system_message.txt',
-        'Knowledge Base': 'prompt/use_rag_prompt.txt'
+        'System Message': 'prompts/system_message.txt',
+        'Knowledge Base': 'prompts/use_rag_prompt.txt'
     }
 
     # Get the appropriate filename
