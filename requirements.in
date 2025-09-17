@@ -18,5 +18,6 @@ langchain_openai
 langchain_community
 sqlalchemy-libsql
 libsql-experimental
+langchain-anthropic
 bs4
 PyJWT
