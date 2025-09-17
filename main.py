@@ -13,6 +13,10 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from utils.util import scape_format_embed, retrieve, scrape_links, define_message_intent
+from sqlalchemy.orm import Session
+from sqlalchemy import select
+from db.models.base import ChatMessage,ChatSession
+
 dotenv.load_dotenv()
 
 
@@ -36,10 +40,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-engine = create_engine("postgresql://chatbot_user:chatbot_pass@localhost:5432/chatbot_db", echo=True)
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+
+engine = create_engine(f"sqlite+{TURSO_DATABASE_URL}?secure=true", connect_args={
+    "auth_token": os.getenv("TURSO_AUTH_TOKEN"),
+})
 
 class UserQuery(BaseModel):
     history: str
+    session_id: str
     message: str
 
 class SystemMessageModel(BaseModel):
@@ -84,8 +94,6 @@ async def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
     except InvalidTokenError:
         raise credentials_exception
 
-
-
 @app.get("/")
 async def root():
     return {"message": "hello world"}
@@ -98,12 +106,29 @@ async def db_init(token: Annotated[str, Depends(get_admin_user)]):
 
 @app.post("/chat")
 async def chat(query: UserQuery):
+    print(query.session_id)
     with open('prompts/use_rag_prompt.txt') as f:
         intent_prompt = f.read()
+
+    with open('prompts/system_message.txt', 'r') as f:
+        system_prompt = f.read()
+    session = Session(engine)
+    stmt = select(ChatSession).where(ChatSession.id == query.session_id)
+    chat_session = session.execute(stmt).scalar_one_or_none()
+    if chat_session:
+        session_id = chat_session.id
+    else:
+        session_id = query.session_id
+        chat_session = ChatSession(id=session_id)
+        session.add(chat_session)
+    user_chat_message = ChatMessage(
+        session_id=session_id,
+        sender="User",
+        content=query.message,
+    )
+    session.add(user_chat_message)
+
     intent = define_message_intent(message=query.message,prompt=intent_prompt)
-    file = open('prompts/system_message.txt', 'r')
-    system_prompt = file.read()
-    file.close()
 
     if "НЕ_ИСПОЛЬЗОВАТЬ_RAG" in intent:
         print('НЕ_ИСПОЛЬЗОВАТЬ_RAG')
@@ -114,7 +139,6 @@ async def chat(query: UserQuery):
     else:
         print('ИСПОЛЬЗОВАТЬ_RAG')
         docs_content = retrieve(query.message)
-        print('контекст', docs_content)
         message = [
             SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {query.history}'),
             HumanMessage(content=query.message)
@@ -122,6 +146,14 @@ async def chat(query: UserQuery):
 
     model = init_chat_model("gpt-5", model_provider="openai")
     response = model.invoke(message)
+    ai_chat_message = ChatMessage(
+        session_id=session_id,
+        sender="AI",
+        content=response.text()
+    )
+    session.add(ai_chat_message)
+    session.commit()
+    session.close()
     return response.text()
 
 @app.post("/upload-site-map")
@@ -193,3 +225,38 @@ async def get_system_message(token: Annotated[str, Depends(get_admin_user)]):
     return {'system_message': system_message,
             'use_rag_prompt': use_rag_prompt
             }
+
+
+@app.get('/get-sessions')
+async def get_sessions(token: Annotated[str, Depends(get_admin_user)]):
+    sessions = Session(engine)
+    stmt = select(ChatSession)
+    result = sessions.execute(stmt)
+    chat_sessions = result.scalars().all()  # Get all session objects
+
+    sessions_data = []
+    for session in chat_sessions:
+        sessions_data.append({
+            "id": session.id,
+            "created_at": session.created_at.isoformat() if hasattr(session, 'created_at') else None,
+        })
+
+    sessions.close()  # Don't forget to close the session
+    return  sessions_data
+
+@app.get('/get-chat/{session_id}')
+async def get_chat(session_id: str ,token: Annotated[str, Depends(get_admin_user)]):
+    sessions = Session(engine)
+    stmt = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at)
+    session = sessions.execute(stmt)
+    chat_messages = session.scalars().all()
+    sessions.close()
+    chats = []
+    for chat_message in chat_messages:
+        chats.append({
+            "id": chat_message.id,
+            "sender": chat_message.sender,
+            "content": chat_message.content,
+            "created_at": chat_message.created_at.isoformat(),
+        })
+    return chats

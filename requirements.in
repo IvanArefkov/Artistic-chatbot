@@ -16,5 +16,7 @@ langchain-chroma
 chromadb
 langchain_openai
 langchain_community
+sqlalchemy-libsql
+libsql-experimental
 bs4
 PyJWT
