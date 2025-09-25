@@ -16,6 +16,7 @@ from utils.util import scape_format_embed, retrieve, scrape_links, define_messag
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from db.models.base import ChatMessage,ChatSession
+import telegram
 
 dotenv.load_dotenv()
 
@@ -106,7 +107,6 @@ async def db_init(token: Annotated[str, Depends(get_admin_user)]):
 
 @app.post("/chat")
 async def chat(query: UserQuery):
-    print(query.session_id)
     with open('prompts/use_rag_prompt.txt') as f:
         intent_prompt = f.read()
 
@@ -154,7 +154,15 @@ async def chat(query: UserQuery):
     session.add(ai_chat_message)
     session.commit()
     session.close()
+    print(response.response_metadata)
     return response.text()
+
+@app.get('/webhook/telegram-chat')
+async def telegram_chat():
+    bot = telegram.Bot(os.getenv("TELEGRAM_BOT_TOKEN"))
+    async with bot:
+        updates = (await bot.get_updates())[0]
+        print(updates)
 
 @app.post("/upload-site-map")
 async def upload_file(file: UploadFile, token: Annotated[str, Depends(get_admin_user)]):
@@ -241,7 +249,7 @@ async def get_sessions(token: Annotated[str, Depends(get_admin_user)]):
             "created_at": session.created_at.isoformat() if hasattr(session, 'created_at') else None,
         })
 
-    sessions.close()  # Don't forget to close the session
+    sessions.close()  #
     return  sessions_data
 
 @app.get('/get-chat/{session_id}')
