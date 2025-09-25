@@ -19,5 +19,6 @@ langchain_community
 sqlalchemy-libsql
 libsql-experimental
 langchain-anthropic
+python-telegram-bot
 bs4
 PyJWT
