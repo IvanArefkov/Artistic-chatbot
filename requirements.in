@@ -20,5 +20,6 @@ sqlalchemy-libsql
 libsql-experimental
 langchain-anthropic
 python-telegram-bot
+apscheduler
 bs4
 PyJWT

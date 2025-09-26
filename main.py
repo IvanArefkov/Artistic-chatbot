@@ -1,8 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Annotated
-from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form, Request
-from pydantic import BaseModel
-from sqlalchemy import create_engine
+from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form, Request, File
 from db.models.base import Base
 import requests
 import os
@@ -13,15 +11,32 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from utils.util import scape_format_embed, retrieve, scrape_links, define_message_intent
+from utils.util import scape_format_embed, retrieve, scrape_links, define_message_intent, process_text_to_chrome
 from sqlalchemy.orm import Session
 from sqlalchemy import select
-from db.models.base import ChatMessage,ChatSession
+from db.models.base import ChatMessage,ChatSession,TelegramChatMessage
+from db.engine import engine
 from telegram import Bot
+from json.decoder import JSONDecodeError
+from pydantic_models.models import UserQuery
+from cleanup_telegram_history import init_scheduler, start_scheduler, stop_scheduler
+from contextlib import asynccontextmanager
 
 dotenv.load_dotenv()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_scheduler()
+    start_scheduler()
+
+    yield  # App runs here
+
+    # Shutdown
+    stop_scheduler()
+app = FastAPI(lifespan=lifespan)
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -43,28 +58,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
-
-engine = create_engine(f"sqlite+{TURSO_DATABASE_URL}?secure=true", connect_args={
-    "auth_token": os.getenv("TURSO_AUTH_TOKEN"),
-})
-
-class UserQuery(BaseModel):
-    history: str
-    session_id: str
-    message: str
-
-class SystemMessageModel(BaseModel):
-    message: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: str | None = None
-
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -76,7 +69,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
+def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -97,6 +90,22 @@ async def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
     except InvalidTokenError:
         raise credentials_exception
 
+def create_message_history(user_message, user_id, assistant_message, session):
+    user_msg = TelegramChatMessage(
+        sender_id=user_id,
+        sender_type='user',
+        message=user_message,
+    )
+    assistant_msg = TelegramChatMessage(
+        sender_id=user_id,
+        sender_type='assistant',
+        message=assistant_message,
+    )
+    session.add(user_msg)
+    session.add(assistant_msg)
+    session.commit()
+    session.close()
+
 @app.get("/")
 async def root():
     return {"message": "hello world"}
@@ -114,19 +123,19 @@ def prompts():
         system_prompt = f.read()
     return intent_prompt, system_prompt
 
-def compile_ai_request(intent, user_message):
+def compile_ai_request(intent, user_message, chat_history='no history', ):
     intent_prompt, system_prompt = prompts()
     if "НЕ_ИСПОЛЬЗОВАТЬ_RAG" in intent:
         print('НЕ_ИСПОЛЬЗОВАТЬ_RAG')
         message = [
-            SystemMessage(content=f'{system_prompt}, История переписки: {user_message}'),
+            SystemMessage(content=f'{system_prompt}, История переписки: {chat_history}'),
             HumanMessage(content=user_message)
         ]
     else:
         print('ИСПОЛЬЗОВАТЬ_RAG')
         docs_content = retrieve(user_message)
         message = [
-            SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {user_message}'),
+            SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {chat_history}'),
             HumanMessage(content=user_message)
         ]
     return message
@@ -166,20 +175,39 @@ async def chat(query: UserQuery):
 
 @app.post('/webhook/telegram-chat')
 async def telegram_webhook(request: Request):
-    update_data = await request.json()
-    print(update_data)
+    try:
+        update_data = await request.json()
+    except JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Problem parsing JSON")
+
     if "message" in update_data:
-        chat_id = update_data["message"]["chat"]["id"]
-        user_message = update_data["message"]["text"]
-        # user_id = update_data["message"]["from"]["id"]
-        intent_prompt, system_prompt = prompts()
-        intent = define_message_intent(message=user_message, prompt=intent_prompt)
-        message = compile_ai_request(intent, user_message)
-        model = init_chat_model("claude-sonnet-4-20250514", model_provider="anthropic")
-        response = model.invoke(message)
-        # Bot handles first message
-        await bot.send_message(chat_id=chat_id, text=response.text())
-    return {"status": "ok"}
+        with Session(engine) as session:
+            try:
+                chat_id = update_data["message"]["chat"]["id"]
+                user_message = update_data["message"]["text"]
+            except KeyError as e:
+                raise HTTPException(status_code=400, detail=f"Missing required field: {e}")
+            intent_prompt, system_prompt = prompts() #get prompts
+            messages = TelegramChatMessage.get_recent_messages(session=session, sender_id=chat_id)
+            chat_history = ''
+            if messages: # check for message history
+                for message in messages:
+                    chat_history += f"sender:{message.sender_type},message: {message.message}, created_at:{message.created_at} \n"
+                chat_history += f"last user message:{user_message}, created_at:{datetime.now()} \n"
+                intent = define_message_intent(message=chat_history, prompt=intent_prompt)
+            else:
+                intent = define_message_intent(message=user_message, prompt=intent_prompt)
+
+            message = compile_ai_request(intent, user_message, chat_history=chat_history)
+            model = init_chat_model("claude-sonnet-4-20250514", model_provider="anthropic")
+            response = model.invoke(message)
+            try:
+                create_message_history(user_message, chat_id, response.text(), session)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e) + 'error writing to database')
+            await bot.send_message(chat_id=chat_id, text=response.text())
+            return {"status": "ok"}
+    raise HTTPException(status_code=404, detail="Message not found in request")
 
 def send_message(chat_id: int, text: str):
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
@@ -200,6 +228,18 @@ async def upload_file(file: UploadFile, token: Annotated[str, Depends(get_admin_
     return {
         'response':'upload success',
     }
+
+@app.post('/upload-new-document')
+async def upload_new_document(file: Annotated[UploadFile,File()] ,token: Annotated[str, Depends(get_admin_user)]):
+    file_read = await file.read()
+    text_file = file_read.decode("utf-8")
+    print(text_file)
+    metadata = {'general info': 'general info'}
+    try:
+        process_text_to_chrome(text_file,metadata)
+    except Exception as e:
+        return {"error": str(e)}
+    return 'success'
 
 @app.get("/check-for-new-product")
 async def test_model(token: Annotated[str, Depends(get_admin_user)]):
