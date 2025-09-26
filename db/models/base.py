@@ -84,7 +84,7 @@ class ChatMessage(Base):
 
 class TelegramChatMessage(Base):
     __tablename__ = "telegram_chat_sessions"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, autoincrement=True, nullable=False)
     sender_id: Mapped[int] = mapped_column(nullable=False, index=True)
     sender_type: Mapped[str] = mapped_column(
         String(50), nullable=False
