@@ -80,3 +80,29 @@ class ChatMessage(Base):
 
     def __repr__(self):
         return f"<ChatMessage(id='{self.id}', session='{self.session_id}', sender='{self.sender}')>"
+
+
+class TelegramChatMessage(Base):
+    __tablename__ = "telegram_chat_sessions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    sender_id: Mapped[int] = mapped_column(nullable=False, index=True)
+    sender_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )
+    date_created: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+        index=True
+    )
+    message: Mapped[str]= mapped_column(Text,nullable=False)
+
+    @classmethod
+    def get_recent_messages(cls, session, sender_id: int, limit: int = 15):
+        return session.query(cls) \
+                   .filter_by(sender_id=sender_id) \
+                   .order_by(cls.date_created.desc()) \
+                   .limit(limit).all()
+
+    def __repr__(self):
+        return f"<TelegramChatSession(id='{self.id}', sender='{self.sender_name}, date_created='{self.date_created}')>"
