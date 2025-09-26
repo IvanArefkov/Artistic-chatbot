@@ -177,6 +177,7 @@ async def chat(query: UserQuery):
 async def telegram_webhook(request: Request):
     try:
         update_data = await request.json()
+        print(update_data)
     except JSONDecodeError:
         raise HTTPException(status_code=400, detail="Problem parsing JSON")
 
