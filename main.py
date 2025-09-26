@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta
 from typing import Annotated
-from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form
+from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form, Request
 from pydantic import BaseModel
 from sqlalchemy import create_engine
 from db.models.base import Base
+import requests
 import os
 import dotenv
 import jwt
@@ -16,10 +17,9 @@ from utils.util import scape_format_embed, retrieve, scrape_links, define_messag
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from db.models.base import ChatMessage,ChatSession
-import telegram
+from telegram import Bot
 
 dotenv.load_dotenv()
-
 
 app = FastAPI()
 
@@ -27,6 +27,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+bot = Bot(token=BOT_TOKEN)
 
 origins = [
     "http://localhost:3000",
@@ -105,13 +107,32 @@ async def db_init(token: Annotated[str, Depends(get_admin_user)]):
     Base.metadata.create_all(engine)
     return {"status":"success init db"}
 
-@app.post("/chat")
-async def chat(query: UserQuery):
+def prompts():
     with open('prompts/use_rag_prompt.txt') as f:
         intent_prompt = f.read()
-
     with open('prompts/system_message.txt', 'r') as f:
         system_prompt = f.read()
+    return intent_prompt, system_prompt
+
+def compile_ai_request(intent, user_message):
+    intent_prompt, system_prompt = prompts()
+    if "НЕ_ИСПОЛЬЗОВАТЬ_RAG" in intent:
+        print('НЕ_ИСПОЛЬЗОВАТЬ_RAG')
+        message = [
+            SystemMessage(content=f'{system_prompt}, История переписки: {user_message}'),
+            HumanMessage(content=user_message)
+        ]
+    else:
+        print('ИСПОЛЬЗОВАТЬ_RAG')
+        docs_content = retrieve(user_message)
+        message = [
+            SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {user_message}'),
+            HumanMessage(content=user_message)
+        ]
+    return message
+
+@app.post("/chat")
+async def chat(query: UserQuery):
     session = Session(engine)
     stmt = select(ChatSession).where(ChatSession.id == query.session_id)
     chat_session = session.execute(stmt).scalar_one_or_none()
@@ -127,23 +148,9 @@ async def chat(query: UserQuery):
         content=query.message,
     )
     session.add(user_chat_message)
-
+    intent_prompt, system_prompt = prompts()
     intent = define_message_intent(message=query.message,prompt=intent_prompt)
-
-    if "НЕ_ИСПОЛЬЗОВАТЬ_RAG" in intent:
-        print('НЕ_ИСПОЛЬЗОВАТЬ_RAG')
-        message = [
-            SystemMessage(content=f'{system_prompt}, История переписки: {query.history}'),
-            HumanMessage(content=query.message)
-        ]
-    else:
-        print('ИСПОЛЬЗОВАТЬ_RAG')
-        docs_content = retrieve(query.message)
-        message = [
-            SystemMessage(content=f'{system_prompt},контекст: {docs_content} , История переписки: {query.history}'),
-            HumanMessage(content=query.message)
-        ]
-
+    message = compile_ai_request(intent, query.message)
     model = init_chat_model("claude-sonnet-4-20250514", model_provider="anthropic")
     response = model.invoke(message)
     ai_chat_message = ChatMessage(
@@ -157,12 +164,31 @@ async def chat(query: UserQuery):
     print(response.response_metadata)
     return response.text()
 
-@app.get('/webhook/telegram-chat')
-async def telegram_chat():
-    bot = telegram.Bot(os.getenv("TELEGRAM_BOT_TOKEN"))
-    async with bot:
-        updates = (await bot.get_updates())[0]
-        print(updates)
+@app.post('/webhook/telegram-chat')
+async def telegram_webhook(request: Request):
+    update_data = await request.json()
+    print(update_data)
+    if "message" in update_data:
+        chat_id = update_data["message"]["chat"]["id"]
+        user_message = update_data["message"]["text"]
+        # user_id = update_data["message"]["from"]["id"]
+        intent_prompt, system_prompt = prompts()
+        intent = define_message_intent(message=user_message, prompt=intent_prompt)
+        message = compile_ai_request(intent, user_message)
+        model = init_chat_model("claude-sonnet-4-20250514", model_provider="anthropic")
+        response = model.invoke(message)
+        # Bot handles first message
+        await bot.send_message(chat_id=chat_id, text=response.text())
+    return {"status": "ok"}
+
+def send_message(chat_id: int, text: str):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+    response = requests.post(url, json=payload)
+    return response.json()
 
 @app.post("/upload-site-map")
 async def upload_file(file: UploadFile, token: Annotated[str, Depends(get_admin_user)]):
