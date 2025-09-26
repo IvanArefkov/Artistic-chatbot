@@ -192,7 +192,7 @@ async def telegram_webhook(request: Request):
             chat_history = ''
             if messages: # check for message history
                 for message in messages:
-                    chat_history += f"sender:{message.sender_type},message: {message.message}, created_at:{message.created_at} \n"
+                    chat_history += f"sender:{message.sender_type},message: {message.message}, created_at:{message.date_created} \n"
                 chat_history += f"last user message:{user_message}, created_at:{datetime.now()} \n"
                 intent = define_message_intent(message=chat_history, prompt=intent_prompt)
             else:
