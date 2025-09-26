@@ -1,9 +1,6 @@
 from datetime import datetime, timedelta
 from typing import Annotated
 from fastapi import FastAPI, UploadFile, Depends, HTTPException,status, Form, Request, File
-from pydantic import BaseModel
-from sqlalchemy import create_engine
-
 from db.models.base import Base
 import requests
 import os
@@ -18,12 +15,28 @@ from utils.util import scape_format_embed, retrieve, scrape_links, define_messag
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from db.models.base import ChatMessage,ChatSession,TelegramChatMessage
+from db.engine import engine
 from telegram import Bot
 from json.decoder import JSONDecodeError
+from pydantic_models.models import UserQuery
+from cleanup_telegram_history import init_scheduler, start_scheduler, stop_scheduler
+from contextlib import asynccontextmanager
 
 dotenv.load_dotenv()
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    init_scheduler()
+    start_scheduler()
+
+    yield  # App runs here
+
+    # Shutdown
+    stop_scheduler()
+app = FastAPI(lifespan=lifespan)
+
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -45,28 +58,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
-
-engine = create_engine(f"sqlite+{TURSO_DATABASE_URL}?secure=true", connect_args={
-    "auth_token": os.getenv("TURSO_AUTH_TOKEN"),
-})
-
-class UserQuery(BaseModel):
-    history: str
-    session_id: str
-    message: str
-
-class SystemMessageModel(BaseModel):
-    message: str
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-
-class TokenData(BaseModel):
-    username: str | None = None
-
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
     to_encode = data.copy()
@@ -78,7 +69,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
+def get_admin_user(token: Annotated[str,Depends(oauth2_scheme)]):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",

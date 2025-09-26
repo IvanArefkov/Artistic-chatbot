@@ -28,6 +28,8 @@ anyio==4.10.0
     #   openai
     #   starlette
     #   watchfiles
+apscheduler==3.11.0
+    # via -r requirements.in
 attrs==25.3.0
     # via
     #   aiohttp
@@ -472,6 +474,8 @@ typing-inspection==0.4.1
     # via
     #   pydantic
     #   pydantic-settings
+tzlocal==5.3.1
+    # via apscheduler
 urllib3==2.5.0
     # via
     #   kubernetes
