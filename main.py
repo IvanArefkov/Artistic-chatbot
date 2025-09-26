@@ -204,7 +204,7 @@ async def telegram_webhook(request: Request):
             try:
                 create_message_history(user_message, chat_id, response.text(), session)
             except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e) + 'error writing to database')
+                raise HTTPException(status_code=500, detail=f'error writing to database {str(e)}')
             await bot.send_message(chat_id=chat_id, text=response.text())
             return {"status": "ok"}
     raise HTTPException(status_code=404, detail="Message not found in request")
