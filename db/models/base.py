@@ -84,7 +84,7 @@ class ChatMessage(Base):
 
 class TelegramChatMessage(Base):
     __tablename__ = "telegram_chat_sessions"
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, autoincrement=True, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
     sender_id: Mapped[int] = mapped_column(nullable=False, index=True)
     sender_type: Mapped[str] = mapped_column(
         String(50), nullable=False
@@ -105,4 +105,4 @@ class TelegramChatMessage(Base):
                    .limit(limit).all()
 
     def __repr__(self):
-        return f"<TelegramChatSession(id='{self.id}', sender='{self.sender_name}, date_created='{self.date_created}')>"
+        return f"<TelegramChatSession(id='{self.id}', sender='{self.sender_type}, date_created='{self.date_created}')>"
