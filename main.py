@@ -182,6 +182,12 @@ async def telegram_webhook(request: Request):
         raise HTTPException(status_code=400, detail="Problem parsing JSON")
 
     if "message" in update_data:
+        try:
+            bot_command = update_data["message"]["entities"]
+            if bot_command:
+                return bot_command
+        except KeyError:
+            pass
         with Session(engine) as session:
             try:
                 chat_id = update_data["message"]["chat"]["id"]
